@@ -1,0 +1,52 @@
+name: tag-on-chart-version
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - Chart.yaml
+
+permissions:
+  contents: write
+
+jobs:
+  tag-on-chart-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref_name }}
+          persist-credentials: true
+
+      - name: Read chart version
+        id: chart_version
+        run: |
+          VERSION=$(grep '^version:' Chart.yaml | awk '{print $2}')
+          echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Detected chart version: v${VERSION}"
+
+      - name: Check if tag already exists
+        id: check_tag
+        env:
+          TAG_VERSION: ${{ steps.chart_version.outputs.version }}
+        run: |
+          if git ls-remote --tags origin "refs/tags/${TAG_VERSION}" | grep -q .; then
+            echo "Tag ${TAG_VERSION} already exists, skipping."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.check_tag.outputs.exists == 'false'
+        env:
+          TAG_VERSION: ${{ steps.chart_version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${TAG_VERSION}"
+          git push origin "${TAG_VERSION}"
