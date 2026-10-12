@@ -5,9 +5,173 @@
 
 {{ template "chart.description" . }}
 
-This chart is used to serve as the template for Validated Patterns Charts
+This chart wraps the upstream
+[CloudNativePG `cluster` Helm chart](https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/README.md)
+for Validated Patterns.
+
+## Scope
+
+| Concern | Where it lives |
+| --- | --- |
+| CloudNativePG operator Subscription / OperatorGroup | ClusterGroup (pattern `applications`) |
+| Target namespace | ClusterGroup |
+| PostgreSQL `Cluster`, `Database` CRs, and related upstream resources | Packaged `cluster` subchart (`cluster.*` values) |
+| Bootstrap and role credentials | This chart: ExternalSecret resources; pattern `values-secret` supplies or generates material |
+
+This chart does **not** install the CloudNativePG operator, create its
+namespace, or create an Operator Subscription.
+
+Red Hat does not support CloudNativePG. Prefer an externally supported
+PostgreSQL instance when a supported database is required.
+
+## Packaging
+
+```yaml
+dependencies:
+  - name: cluster
+    version: "0.9.0"
+    repository: https://cloudnative-pg.github.io/charts
+```
+
+The dependency version is pinned in `Chart.lock`. The chart tarball under
+`charts/` is not committed; run `make helm-deps` (or `helm dependency update .`)
+before lint, test, or install.
+
+Upstream values are passed under the top-level `cluster` key (the subchart
+name). Nested `cluster.cluster.*` settings map to the upstream Cluster CR
+configuration. Additional databases use upstream `cluster.databases`. Managed
+roles use `cluster.cluster.roles`. See the
+[upstream README](https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/README.md)
+for the full subchart value set.
+
+Wrapper-specific keys:
+
+- `secretStore` — ClusterSecretStore / SecretStore reference used by ExternalSecret
+- `secrets` — whether and how credentials are projected
+
+By default the Cluster (and upstream Database resources) use sync-wave `1`, and
+ExternalSecrets use sync-wave `0`. Negative sync-waves are avoided because they
+can cause Argo CD problems in some situations.
+
+When backups are enabled later, `cluster.backups.objectStore.helmHook` defaults
+to `false` so ObjectStore creation works under Argo CD.
+
+### Secrets
+
+Validated Patterns normally keep secret material out of Git. Database passwords
+default to generation through the pattern secrets loader:
+
+```yaml
+# values-secret.yaml.template (pattern repo, not this chart)
+version: "2.0"
+secrets:
+  - name: app-secret
+    vaultPrefixes:
+      - hub
+    fields:
+      - name: username
+        value: app
+      - name: password
+        onMissingValue: generate
+        vaultPolicy: validatedPatternDefaultPolicy
+      - name: database
+        value: app
+```
+
+Users who prefer fixed credentials set `value:` (or `path:` / `ini_file:`)
+instead of `onMissingValue: generate`.
+
+This chart projects backend entries into namespace Secrets with ExternalSecret
+objects (default store `vault-backend` / `ClusterSecretStore`). Secret names are
+taken from:
+
+1. `cluster.cluster.initdb.secret.name`
+2. `cluster.cluster.roles[].passwordSecret.name`
+3. `secrets.additional`
+
+Each maps to remote key `<secrets.keyPrefix>/<name>` (for example
+`secret/data/hub/app-secret`). Target Secrets use type
+`kubernetes.io/basic-auth` and extract all properties from that backend key.
+
+### Additional databases
+
+The upstream chart bootstraps one application database through
+`cluster.cluster.initdb`. For more databases, set `cluster.databases` and, when
+owners are not the bootstrap owner, `cluster.cluster.roles` with
+`passwordSecret` references. Add any app-facing Secret names that are not
+already covered to `secrets.additional`.
+
+## Example: Automation Orchestrator
+
+Automation Orchestrator (Red Hat AAP) is one consumer of this chart. A pattern
+would typically:
+
+1. Install the CloudNativePG operator and create the target namespace from the
+   ClusterGroup
+2. Deploy this chart with a bootstrap database plus Temporal databases
+3. Deploy the automation-orchestrator chart against the resulting service and
+   Secrets
+
+Illustrative values (not defaults of this chart):
+
+```yaml
+secrets:
+  enabled: true
+  keyPrefix: secret/data/hub
+  additional:
+    - temporal-visibility-postgres-secret
+
+cluster:
+  type: postgresql
+  mode: standalone
+  version:
+    postgresql: "15"
+  databases:
+    - name: temporal
+      owner: temporal
+    - name: temporal_visibility
+      owner: temporal
+  cluster:
+    instances: 1
+    storage:
+      size: 5Gi
+    initdb:
+      database: orchestrator
+      owner: orchestrator
+      secret:
+        name: orchestrator-postgres-secret
+    roles:
+      - name: temporal
+        ensure: present
+        login: true
+        passwordSecret:
+          name: temporal-postgres-secret
+    annotations:
+      argocd.argoproj.io/sync-wave: "1"
+  backups:
+    enabled: false
+```
+
+Matching `values-secret` fields would generate or supply passwords for
+`orchestrator-postgres-secret`, `temporal-postgres-secret`, and
+`temporal-visibility-postgres-secret`. Databases that share a username share one
+password in the backend when you configure them that way; each Kubernetes Secret
+can still carry its own `database` key.
+
+The automation-orchestrator chart would then point at the CloudNativePG
+read-write service (for example
+`<release>-cluster-rw.<namespace>.svc` or a `fullnameOverride` of your choosing),
+SSL mode `verify-ca`, the cluster CA Secret, and the backend / Temporal
+credential Secrets above.
 
 ## Notable changes
+
+### 0.1.0
+
+- Initial Validated Patterns wrapper around upstream `cluster` 0.9.0
+- External Secrets projection with pattern `onMissingValue: generate`
+- Additional databases via upstream `cluster.databases` and managed roles
+- Operator Subscription and namespace remain ClusterGroup concerns
 
 {{ template "chart.homepageLine" . }}
 

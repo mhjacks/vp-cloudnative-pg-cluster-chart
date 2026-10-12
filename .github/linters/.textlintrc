@@ -1,10 +1,11 @@
 {
   "rules": {
     "terminology": {
-      // Excludes terms
       "exclude": [
-        "URL"
-        ]
+        "URL",
+        "README",
+        "postgresql"
+      ]
     }
   }
 }

@@ -1,1 +1,72 @@
 ---
+# -- Global pattern values. Patterns commonly inject hub/cluster metadata here.
+global: {}
+
+secretStore:
+  # -- External Secrets store used to project database credentials.
+  name: vault-backend
+  # -- External Secrets store kind.
+  kind: ClusterSecretStore
+
+# Database credentials are projected with ExternalSecret resources. Patterns
+# supply or generate the backing material through values-secret (default
+# onMissingValue: generate). Secret names are inferred from
+# cluster.cluster.initdb.secret.name and
+# cluster.cluster.roles[].passwordSecret.name, plus secrets.additional.
+secrets:
+  # -- Create ExternalSecret resources for database credentials.
+  enabled: true
+  # -- Vault (or other backend) key prefix used by ExternalSecret remote refs.
+  # Patterns typically use secret/data/hub/<name> with the vault backend.
+  keyPrefix: secret/data/hub
+  # -- Refresh interval for ExternalSecret resources.
+  refreshInterval: 15s
+  # -- Argo CD sync-wave for ExternalSecret resources so credentials exist
+  # before the CloudNativePG Cluster is applied. Avoid negative waves.
+  syncWave: "0"
+  # -- Extra Secret names to project beyond those inferred from initdb and roles.
+  additional: []
+
+# Values passed through to the upstream CloudNativePG cluster subchart.
+# Structure matches upstream values.yaml. See
+# https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/README.md
+cluster:
+  # -- Database type. One of postgresql, postgis, timescaledb.
+  type: postgresql
+  # -- Cluster mode. One of standalone, replica, recovery.
+  mode: standalone
+  version:
+    # -- PostgreSQL major version used by the upstream chart image selection.
+    postgresql: "16"
+  # -- Additional CloudNativePG Database CRs managed by the upstream subchart.
+  # See upstream docs for owner, extensions, schemas, and related fields.
+  databases: []
+  cluster:
+    # -- Number of PostgreSQL instances.
+    instances: 1
+    storage:
+      # -- Persistent volume size for PostgreSQL data.
+      size: 8Gi
+      # -- Storage class for PostgreSQL volumes. Empty uses the cluster default.
+      storageClass: ""
+    # -- Bootstrap initdb settings. Set secret.name and project that Secret
+    # with External Secrets (or provide an existing Secret).
+    initdb: {}
+    #  database: app
+    #  owner: app
+    #  secret:
+    #    name: app-secret
+    # -- Declarative managed roles. Use passwordSecret.name for credentials
+    # projected by this chart.
+    roles: []
+    # -- Annotations applied to the Cluster and Database resources.
+    annotations:
+      argocd.argoproj.io/sync-wave: "1"
+  backups:
+    # -- Disable backups by default. Enable and configure when an object store
+    # is available in the pattern.
+    enabled: false
+    objectStore:
+      # -- Disable Helm hooks so ObjectStore works with Argo CD when backups
+      # are enabled later.
+      helmHook: false

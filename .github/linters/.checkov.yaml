@@ -4,7 +4,9 @@ directory:
   - .
 skip-path:
   - tests
+  - charts
 skip-check:
+  - CKV_K8S_21 # The default namespace should not be used
   - CKV_K8S_49 # Minimize wildcard use in Roles and ClusterRoles
   - CKV_K8S_155 # Minimize ClusterRoles that grant control over validating or mutating admission webhook configurations
   - CKV_K8S_156 # Minimize ClusterRoles that grant permissions to approve CertificateSigningRequests

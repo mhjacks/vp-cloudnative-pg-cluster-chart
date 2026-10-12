@@ -1,6 +1,24 @@
 apiVersion: v2
-description: A Helm chart to serve as the Validated Patterns Template
+name: vp-cloudnative-pg-cluster
+description: Validated Patterns wrapper chart for the CloudNativePG cluster Helm chart
+type: application
+version: 0.1.0
+# Tracks the default PostgreSQL major version from the upstream cluster chart.
+appVersion: "16"
 keywords:
   - pattern
-name: vp-template
-version: 0.0.1
+  - postgresql
+  - cloudnative-pg
+  - cnpg
+home: https://github.com/validatedpatterns/vp-cloudnative-pg-cluster-chart
+sources:
+  - https://github.com/validatedpatterns/vp-cloudnative-pg-cluster-chart
+  - https://github.com/cloudnative-pg/charts
+maintainers:
+  - name: Validated Patterns Team
+    email: validatedpatterns@googlegroups.com
+icon: https://validatedpatterns.io/images/validated-patterns.png
+dependencies:
+  - name: cluster
+    version: "0.9.0"
+    repository: https://cloudnative-pg.github.io/charts

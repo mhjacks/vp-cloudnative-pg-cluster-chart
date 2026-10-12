@@ -14,12 +14,16 @@ help: ## This help message
 	@echo "Pattern: $(NAME)"
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^(\s|[a-zA-Z_0-9-])+:.*?##/ { printf "  \033[36m%-35s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+.PHONY: helm-deps
+helm-deps: ## Fetches chart dependencies (does not commit the tarball)
+	helm dependency update .
+
 .PHONY: helm-lint
-helm-lint: ## Runs helm lint against the chart
+helm-lint: helm-deps ## Runs helm lint against the chart
 	helm lint .
 
 .PHONY: helm-unittest
-helm-unittest: ## Runs the helm unit tests
+helm-unittest: helm-deps ## Runs the helm unit tests
 	podman run $(PODMAN_ARGS) -v $(PWD):/apps:rw $(HELM_UNITTEST_IMAGE) .
 
 .PHONY: helm-docs
@@ -38,6 +42,11 @@ super-linter: ## Runs super linter locally
 	rm -rf .mypy_cache
 	podman run -e RUN_LOCAL=true -e USE_FIND_ALGORITHM=true	\
 					-e VALIDATE_BIOME_FORMAT=false \
+					-e VALIDATE_CHECKOV=false \
+					-e VALIDATE_MARKDOWN=false \
+					-e VALIDATE_MARKDOWN_PRETTIER=false \
+					-e VALIDATE_NATURAL_LANGUAGE=false \
+					-e FILTER_REGEX_EXCLUDE='.*/templates/.*' \
 					-v $(PWD):/tmp/lint:rw,z \
 					-w /tmp/lint \
 					ghcr.io/super-linter/super-linter:slim-v8

@@ -2,7 +2,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=helm,vim,linux
 
 ### Helm ###
-# Chart dependencies
+# Chart dependencies are fetched with `make helm-deps` / `helm dependency update`
 **/charts/*.tgz
 
 ### Linux ###
