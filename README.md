@@ -6,8 +6,7 @@ Validated Patterns wrapper chart for the CloudNativePG cluster Helm chart
 
 This chart wraps the upstream
 [CloudNativePG `cluster` Helm chart](https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/README.md)
-for Validated Patterns. It replaces the earlier `cloudnative-pg-chart` approach
-that templated Cluster resources directly and generated credentials with a Job.
+for Validated Patterns.
 
 ## Scope
 
