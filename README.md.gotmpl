@@ -112,6 +112,11 @@ would typically:
 3. Deploy the automation-orchestrator chart against the resulting service and
    Secrets
 
+Complete example files live under [`examples/`](examples/):
+
+- [`examples/automation-orchestrator.yaml`](examples/automation-orchestrator.yaml) — chart values
+- [`examples/values-secret-automation-orchestrator.yaml`](examples/values-secret-automation-orchestrator.yaml) — pattern `values-secret` entries
+
 Illustrative values (not defaults of this chart):
 
 ```yaml
@@ -122,6 +127,8 @@ secrets:
     - temporal-visibility-postgres-secret
 
 cluster:
+  # Align Cluster / Services / CA secret names with automation-orchestrator defaults.
+  fullnameOverride: orchestrator-postgres
   type: postgresql
   mode: standalone
   version:
@@ -135,11 +142,32 @@ cluster:
     instances: 1
     storage:
       size: 5Gi
+    postgresql:
+      parameters:
+        max_connections: "200"
+    # Databases share the Cluster endpoint; one RW LoadBalancer covers
+    # orchestrator, temporal, and temporal_visibility.
+    # See https://cloudnative-pg.io/documentation/current/service_management/
+    services:
+      additional:
+        - selectorType: rw
+          serviceTemplate:
+            metadata:
+              name: orchestrator-postgres-lb
+            spec:
+              type: LoadBalancer
+              ports:
+                - name: postgres
+                  port: 5432
+                  targetPort: 5432
+                  protocol: TCP
     initdb:
       database: orchestrator
       owner: orchestrator
       secret:
         name: orchestrator-postgres-secret
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS pgcrypto;
     roles:
       - name: temporal
         ensure: present
@@ -152,17 +180,57 @@ cluster:
     enabled: false
 ```
 
-Matching `values-secret` fields would generate or supply passwords for
-`orchestrator-postgres-secret`, `temporal-postgres-secret`, and
-`temporal-visibility-postgres-secret`. Databases that share a username share one
-password in the backend when you configure them that way; each Kubernetes Secret
-can still carry its own `database` key.
+Matching pattern `values-secret` entries (also in
+`examples/values-secret-automation-orchestrator.yaml`):
+
+```yaml
+version: "2.0"
+
+secrets:
+  - name: orchestrator-postgres-secret
+    vaultPrefixes:
+      - hub
+    fields:
+      - name: username
+        value: orchestrator
+      - name: password
+        onMissingValue: generate
+        vaultPolicy: validatedPatternDefaultPolicy
+      - name: database
+        value: orchestrator
+  - name: temporal-postgres-secret
+    vaultPrefixes:
+      - hub
+    fields:
+      - name: username
+        value: temporal
+      - name: password
+        onMissingValue: generate
+        vaultPolicy: validatedPatternDefaultPolicy
+      - name: database
+        value: temporal
+  - name: temporal-visibility-postgres-secret
+    vaultPrefixes:
+      - hub
+    fields:
+      - name: username
+        value: temporal
+      - name: password
+        onMissingValue: generate
+        vaultPolicy: validatedPatternDefaultPolicy
+      - name: database
+        value: temporal_visibility
+```
+
+`temporal` and `temporal_visibility` share the `temporal` role; set the same
+password on both secrets if you do not want independent generated passwords.
+Each Kubernetes Secret can still carry its own `database` key.
 
 The automation-orchestrator chart would then point at the CloudNativePG
-read-write service (for example
-`<release>-cluster-rw.<namespace>.svc` or a `fullnameOverride` of your choosing),
-SSL mode `verify-ca`, the cluster CA Secret, and the backend / Temporal
-credential Secrets above.
+read-write service (`orchestrator-postgres-rw.<namespace>.svc` with the
+`fullnameOverride` above), optional LoadBalancer `orchestrator-postgres-lb`,
+SSL mode `verify-ca`, the cluster CA Secret (`orchestrator-postgres-ca`), and
+the backend / Temporal credential Secrets above.
 
 ## Notable changes
 
