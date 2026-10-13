@@ -154,6 +154,13 @@ cluster:
           serviceTemplate:
             metadata:
               name: orchestrator-postgres-lb
+              # Opt in to Validated Patterns External DNS (external-dns-operator chart).
+              # Default FQDN: <service-name>.<global.clusterDomain>
+              labels:
+                external-dns.validatedpatterns.io/publish: "yes"
+              # Optional: override the generated name (hostnameAnnotation: Allow).
+              # annotations:
+              #   external-dns.alpha.kubernetes.io/hostname: postgres.apps.example.com
             spec:
               type: LoadBalancer
               ports:
@@ -231,6 +238,59 @@ read-write service (`orchestrator-postgres-rw.<namespace>.svc` with the
 `fullnameOverride` above), optional LoadBalancer `orchestrator-postgres-lb`,
 SSL mode `verify-ca`, the cluster CA Secret (`orchestrator-postgres-ca`), and
 the backend / Temporal credential Secrets above.
+
+## External DNS for LoadBalancer Services
+
+The Validated Patterns
+[external-dns-operator chart](https://github.com/validatedpatterns/external-dns-operator-chart)
+can publish DNS names for Kubernetes Services of type `LoadBalancer`.
+
+When that chart is installed in the pattern (ClusterGroup concern: operator
+Subscription plus the `external-dns-operator` application), it creates an
+`ExternalDNS` resource that:
+
+- Watches **LoadBalancer** Services only
+- Requires the opt-in label `external-dns.validatedpatterns.io/publish: "yes"`
+- Builds a default FQDN as `<service-name>.<global.clusterDomain>` using the
+  chart default `fqdnTemplate` (`{{ "{{" }}.Name{{ "}}" }}.` plus the pattern
+  `global.clusterDomain`)
+- Allows an explicit hostname via
+  `external-dns.alpha.kubernetes.io/hostname` (`hostnameAnnotation: Allow`)
+- Targets the DNS zone that is the **parent** of `global.clusterDomain`, using
+  the cluster cloud credentials (`global.clusterPlatform`)
+
+For a CloudNativePG additional service created through
+`cluster.cluster.services.additional`, put the label (and optional annotation)
+on the `serviceTemplate.metadata`:
+
+```yaml
+cluster:
+  cluster:
+    services:
+      additional:
+        - selectorType: rw
+          serviceTemplate:
+            metadata:
+              name: orchestrator-postgres-lb
+              labels:
+                external-dns.validatedpatterns.io/publish: "yes"
+              # annotations:
+              #   external-dns.alpha.kubernetes.io/hostname: postgres.apps.example.com
+            spec:
+              type: LoadBalancer
+```
+
+With the default `fqdnTemplate` and `fullnameOverride: orchestrator-postgres`, the
+published name is typically:
+
+`orchestrator-postgres-lb.<global.clusterDomain>`
+
+for example `orchestrator-postgres-lb.apps.cluster.example.com` when
+`global.clusterDomain` is `apps.cluster.example.com`. Override with the hostname
+annotation when you need a different name. Ensure the parent zone is managed in
+the same cloud account the External DNS Operator uses.
+
+See also `examples/automation-orchestrator.yaml`.
 
 ## Notable changes
 
